@@ -205,7 +205,7 @@ Field offsets shift when the game adds/removes/reorders properties. The dumper d
 
 ## Related
 
-- [sbox-internal](../sbox-internal) — ESP overlay that consumes the offsets from this dumper
+- [sbox-external](https://github.com/mytrashcan/sbox-external) — ESP overlay that consumes the offsets from this dumper
 
 ---
 
