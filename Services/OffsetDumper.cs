@@ -14,6 +14,9 @@ static class OffsetDumper
         ("Sandbox.GameTransform",                "GameTransform"),
         ("Sandbox.PlayerController",             "PlayerController"),
         ("Sandbox.CharacterController",          "CharacterController"),
+        ("Sandbox.CameraComponent",              "CameraComponent"),
+        ("Sandbox.ModelRenderer",                "ModelRenderer"),
+        ("Sandbox.SkinnedModelRenderer",         "SkinnedModelRenderer"),
         ("Sandbox.Dresser",                      "Dresser"),
         ("Dxura.RP.Game.Player",                 "DxrpPlayer"),
         ("Dxura.RP.Game.HealthComponent",        "HealthComponent"),
@@ -86,10 +89,19 @@ static class OffsetDumper
 
         // PlayerController
         Map(dump, "PlayerController", "<WishVelocity>k__BackingField", "WishVelocity");
+        Map(dump, "PlayerController", "<Velocity>k__BackingField",     "Velocity");
+        Map(dump, "PlayerController", "<EyeAngles>k__BackingField",    "EyeAngles");
+        Map(dump, "PlayerController", "<IsDucking>k__BackingField",    "IsDucking");
+        Map(dump, "PlayerController", "<IsClimbing>k__BackingField",   "IsClimbing");
+        Map(dump, "PlayerController", "<IsSwimming>k__BackingField",   "IsSwimming");
+        Map(dump, "PlayerController", "<IsOnGround>k__BackingField",   "IsOnGround");
 
         // CharacterController
         Map(dump, "CharacterController", "<Velocity>k__BackingField",   "Velocity");
         Map(dump, "CharacterController", "<IsOnGround>k__BackingField", "IsOnGround");
+
+        // CameraComponent
+        Map(dump, "CameraComponent", "<FieldOfView>k__BackingField", "FieldOfView");
 
         // DXRP Player
         Map(dump, "DxrpPlayer", "<GameObject>k__BackingField",        "GameObject");
@@ -131,6 +143,8 @@ static class OffsetDumper
         Map(dump, "HealthComponent", "<Health>k__BackingField",    "Health");
         Map(dump, "HealthComponent", "<MaxHealth>k__BackingField", "MaxHealth");
         Map(dump, "HealthComponent", "<IsDead>k__BackingField",    "IsDead");
+        Map(dump, "HealthComponent", "<LifeState>k__BackingField", "LifeState");
+        Map(dump, "HealthComponent", "<IsGodMode>k__BackingField", "IsGodMode");
 
         // ArmorComponent
         Map(dump, "ArmorComponent", "<Armor>k__BackingField",     "Armor");
@@ -144,6 +158,12 @@ static class OffsetDumper
         Map(dump, "JobResource", "<Salary>k__BackingField",      "Salary");
         Map(dump, "JobResource", "<MaxSlots>k__BackingField",    "MaxSlots");
         Map(dump, "JobResource", "<Category>k__BackingField",    "Category");
+
+        // PrinterEntity
+        Map(dump, "PrinterEntity", "<Owner>k__BackingField",          "Owner");
+        Map(dump, "PrinterEntity", "<CurrentBalance>k__BackingField", "CurrentBalance");
+        Map(dump, "PrinterEntity", "<MaxBalance>k__BackingField",     "MaxBalance");
+        Map(dump, "PrinterEntity", "<PrintRate>k__BackingField",      "PrintRate");
 
         // Dresser
         Map(dump, "Dresser", "<ManualHeight>k__BackingField", "ManualHeight");

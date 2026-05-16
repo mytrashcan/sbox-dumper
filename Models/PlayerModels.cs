@@ -35,6 +35,12 @@ class PlayerDump
     public bool IsDebugPlayer { get; set; }
     public float Spread { get; set; }
 
+    // Controller state
+    public bool IsDucking { get; set; }
+    public bool IsClimbing { get; set; }
+    public bool IsSwimming { get; set; }
+    public bool IsOnGround { get; set; }
+
     // Faction
     public string? FactionId { get; set; }
     public string? FactionRoleId { get; set; }
@@ -74,6 +80,8 @@ class HealthDump
     public float Current { get; set; }
     public float Max { get; set; }
     public bool IsDead { get; set; }
+    public int LifeState { get; set; }
+    public bool IsGodMode { get; set; }
 }
 
 class ArmorDump

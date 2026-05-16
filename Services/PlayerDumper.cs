@@ -100,7 +100,14 @@ static class PlayerDumper
 
             // Controller
             TryReadField(obj, "<Controller>k__BackingField", out var ctrlObj);
-            if (ctrlObj.IsValid) player.ControllerAddress = $"0x{ctrlObj.Address:X}";
+            if (ctrlObj.IsValid)
+            {
+                player.ControllerAddress = $"0x{ctrlObj.Address:X}";
+                player.IsDucking = TryReadBool(ctrlObj, "<IsDucking>k__BackingField");
+                player.IsClimbing = TryReadBool(ctrlObj, "<IsClimbing>k__BackingField");
+                player.IsSwimming = TryReadBool(ctrlObj, "<IsSwimming>k__BackingField");
+                player.IsOnGround = TryReadBool(ctrlObj, "<IsOnGround>k__BackingField");
+            }
 
             // Equipment
             TryReadField(obj, "<CurrentEquipment>k__BackingField", out var eqObj);
@@ -196,8 +203,16 @@ static class PlayerDumper
                 if (name.Contains("MaxHealth", StringComparison.OrdinalIgnoreCase)) h.Max = val;
                 else if (name.Contains("Health", StringComparison.OrdinalIgnoreCase)) h.Current = val;
             }
-            else if (tn == "System.Boolean" && name.Contains("IsDead", StringComparison.OrdinalIgnoreCase))
-                h.IsDead = TryReadBoolField(obj, f);
+            else if (tn == "System.Int32" && name.Contains("LifeState", StringComparison.OrdinalIgnoreCase))
+                h.LifeState = TryReadInt32Field(obj, f);
+            else if (tn == "System.Boolean")
+            {
+                if (name.Contains("IsDead", StringComparison.OrdinalIgnoreCase))
+                    h.IsDead = TryReadBoolField(obj, f);
+                else if (name.Contains("IsGodMode", StringComparison.OrdinalIgnoreCase) ||
+                         name.Contains("GodMode", StringComparison.OrdinalIgnoreCase))
+                    h.IsGodMode = TryReadBoolField(obj, f);
+            }
         }
         return h;
     }
