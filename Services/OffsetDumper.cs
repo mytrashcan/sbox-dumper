@@ -27,6 +27,8 @@ static class OffsetDumper
         ("Dxura.RP.Game.AnimationHelper",        "AnimationHelper"),
         ("Dxura.RP.Game.TagBinder",              "TagBinder"),
         ("Dxura.RP.Game.Door",                   "Door"),
+        ("Dxura.RP.Game.Prop",                   "Prop"),
+        ("Dxura.RP.Game.Tools.FadingDoorTool",   "FadingDoorTool"),
         ("Dxura.RP.Game.Entities.PrinterEntity", "PrinterEntity"),
     ];
 
