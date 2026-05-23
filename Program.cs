@@ -82,8 +82,16 @@ static class Program
             var offsetJson = JsonSerializer.Serialize(dump.Offsets, jsonOpts);
             File.WriteAllText("output/offsets.json", offsetJson);
 
+            // DMA offsets for auto-updater (external reads this at startup)
+            var dmaJson = JsonSerializer.Serialize(dump.DmaOffsets, jsonOpts);
+            File.WriteAllText("output/dma_offsets.json", dmaJson);
+            // Shared location: tools/dma_offsets.json (sibling to sbox-dumper/)
+            try { File.WriteAllText(Path.Combine("..", "dma_offsets.json"), dmaJson); }
+            catch { /* non-critical — local copy exists */ }
+
             Console.WriteLine($"\n[+] output/sbox_dump.json    ({json.Length:N0} bytes)");
             Console.WriteLine($"[+] output/offsets.json      ({offsetJson.Length:N0} bytes)");
+            Console.WriteLine($"[+] output/dma_offsets.json  ({dmaJson.Length:N0} bytes) [auto-updater]");
             Console.WriteLine("[+] Done.");
             return 0;
         }

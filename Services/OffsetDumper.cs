@@ -167,10 +167,23 @@ static class OffsetDumper
         Map(dump, "PrinterEntity", "<MaxBalance>k__BackingField",     "MaxBalance");
         Map(dump, "PrinterEntity", "<PrintRate>k__BackingField",      "PrintRate");
 
+        // Prop
+        Map(dump, "Prop", "<GameObject>k__BackingField",      "GameObject");
+        Map(dump, "Prop", "<FadeDuration>k__BackingField",    "FadeDuration");
+        Map(dump, "Prop", "<FadingDoor>k__BackingField",      "FadingDoor");
+        Map(dump, "Prop", "<Fade>k__BackingField",            "Fade");
+        Map(dump, "Prop", "<IsFadingBreached>k__BackingField", "IsFadingBreached");
+        Map(dump, "Prop", "<IsReversed>k__BackingField",      "IsReversed");
+
         // Dresser
         Map(dump, "Dresser", "<ManualHeight>k__BackingField", "ManualHeight");
         Map(dump, "Dresser", "<ManualTint>k__BackingField",   "ManualTint");
         Map(dump, "Dresser", "<ManualAge>k__BackingField",    "ManualAge");
+
+        // DxrpPlayer — additional fields for auto-updater
+        Map(dump, "DxrpPlayer", "<IsPulsing>k__BackingField",         "IsPulsing");
+        Map(dump, "DxrpPlayer", "<IsDebugPlayer>k__BackingField",     "IsDebugPlayer");
+        Map(dump, "DxrpPlayer", "<DisconnectedSince>k__BackingField", "DisconnectedSince");
 
         // Print summary
         foreach (var (cat, entries) in dump.DmaOffsets.OrderBy(kv => kv.Key))
