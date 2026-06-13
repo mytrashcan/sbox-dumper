@@ -27,23 +27,44 @@ static class HeapWalker
         var snap = new HeapSnapshot();
         int objCount = 0;
 
+        // MethodTable → per-type classification, computed once per unique type.
+        // Without this, the base-type chain walk and name comparisons run for
+        // every object on the heap (millions) instead of every type (thousands).
+        var classified = new Dictionary<ulong, (bool IsPlayer, bool IsComponent, string Name)>();
+
         foreach (var obj in heap.EnumerateObjects())
         {
             var t = obj.Type;
-            if (t?.Name is null) continue;
+            if (t is null) continue;
+
+            if (!classified.TryGetValue(t.MethodTable, out var info))
+            {
+                var name = t.Name;
+                if (name is null)
+                {
+                    classified[t.MethodTable] = (false, false, "");
+                    continue;
+                }
+
+                snap.TypeCache.TryAdd(name, t);
+                info = (name == "Dxura.RP.Game.Player", FieldReaders.IsComponentSubclass(t), name);
+                classified[t.MethodTable] = info;
+            }
+            else if (info.Name.Length == 0)
+            {
+                continue;
+            }
+
             objCount++;
 
-            // ── 1. Cache unique types ───────────────────
-            snap.TypeCache.TryAdd(t.Name, t);
-
-            // ── 2. Collect Player objects ────────────────
-            if (t.Name == "Dxura.RP.Game.Player")
+            // ── Collect Player objects ──────────────────
+            if (info.IsPlayer)
             {
                 snap.PlayerObjects.Add(obj);
             }
 
-            // ── 3. Build Component→GameObject mapping ───
-            if (FieldReaders.IsComponentSubclass(t))
+            // ── Build Component→GameObject mapping ──────
+            if (info.IsComponent)
             {
                 if (FieldReaders.TryReadField(obj, "<GameObject>k__BackingField", out var goRef) && goRef.IsValid)
                 {
@@ -55,7 +76,7 @@ static class HeapWalker
                     list.Add(new ComponentRef
                     {
                         Address = $"0x{obj.Address:X}",
-                        Type = t.Name,
+                        Type = info.Name,
                     });
                 }
             }
