@@ -2,7 +2,7 @@
 
 > DXRP / s&box runtime offset & player dumper built with ClrMD
 
-`sbox-dumper` is a .NET 8 tool that attaches to a running `sbox` process and extracts runtime field offsets, player data, and component references from the managed heap. Designed for DMA development — run it after every game update to regenerate offsets.
+`sbox-dumper` is a .NET 10 tool that attaches to a running `sbox` process and extracts runtime field offsets, player data, and component references from the managed heap. Designed for DMA development — run it after every game update to regenerate offsets.
 
 ---
 
@@ -68,7 +68,7 @@ sbox-dumper/
 ## Requirements
 
 - Windows
-- .NET 8 Runtime / SDK
+- .NET 10 Runtime / SDK
 - Administrator privileges (for process memory access)
 - Running `sbox` game instance (fully loaded into a server)
 
@@ -102,7 +102,7 @@ dotnet run -- someprocess
 Or run the compiled executable directly:
 
 ```bash
-./bin/Release/net8.0/sbox-dumper.exe
+./bin/Release/net10.0/sbox-dumper.exe
 ```
 
 ---
@@ -198,7 +198,7 @@ Field offsets shift when the game adds/removes/reorders properties. The dumper d
 
 ## Tech Stack
 
-- C# / .NET 8
+- C# / .NET 10
 - [ClrMD](https://github.com/microsoft/clrmd) (`Microsoft.Diagnostics.Runtime`) — managed heap inspection
 
 ---
