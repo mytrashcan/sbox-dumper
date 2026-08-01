@@ -247,11 +247,12 @@ static class PlayerDumper
 
         try
         {
-            // _targetLocal is an inline value type; its raw struct bytes
-            // (pos/scale/rot) are read directly from memory. The +8 skips the
-            // leading bytes observed in live dumps — the fallback below re-reads
-            // without the skip when the result looks degenerate (all-zero or NaN),
-            // since the layout can differ between game versions.
+            // _targetLocal is an inline value type; read its raw struct bytes
+            // (pos/scale/rot) directly from memory. +8 = the object's
+            // MethodTable pointer (ClrMD field offsets are relative to the
+            // object data start). The fallback below re-reads without it when
+            // the result looks degenerate (all-zero/NaN) — defensive, since
+            // the reported field offset can shift between game versions.
             var rawBytes = new byte[40];
             runtime.DataTarget.DataReader.Read(addr + (ulong)baseOffset + 8, rawBytes);
 

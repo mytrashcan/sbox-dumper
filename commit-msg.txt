@@ -1,0 +1,9 @@
+docs: correct offset comments — +8 is the MethodTable pointer
+
+The TryReadGuid and ReadTransformData comments claimed an empirically derived
+"8-byte header / skip". Cross-checking against sbox-external's memory reads
+(playerBase = obj + MtPtr, Nullable<Guid> = hasValue(1) + pad(3) + Guid(16))
+shows the +8 is simply the object's MethodTable pointer: ClrMD field offsets
+are relative to the object DATA start, so the field address is
+obj + MtPtr + fieldOffset. The reads themselves were correct — only the
+comments were misleading.
