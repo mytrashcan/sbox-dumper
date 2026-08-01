@@ -127,11 +127,12 @@ static class FieldReaders
             if (field is null) return null;
 
             var bytes = new byte[20];
-            // Empirically derived layout for the game's nullable Guid fields:
-            // an 8-byte header precedes the 16-byte Guid value, and an all-zero
-            // leading byte means "no value". If FactionId/FactionRoleId ever come
-            // back null in a live dump, re-verify this against ClrMD's reported
-            // field offset — the header size is the fragile part.
+            // Nullable<Guid> layout: hasValue(1) + pad(3) + Guid(16) = 20 bytes.
+            // ClrMD field offsets are relative to the object DATA start, so the
+            // +8 is the object's MethodTable pointer — not a magic skip.
+            // bytes[0] = hasValue; the Guid occupies bytes[4..20].
+            // (Cross-checked against sbox-external's faction read: same address
+            //  formula obj + MtPtr + fieldOffset, same field layout.)
             var addr = obj.Address + (ulong)field.Offset + 8;
             var dt = field.Type?.Heap?.Runtime?.DataTarget;
             if (dt == null) return null;
