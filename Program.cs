@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Diagnostics.Runtime;
@@ -9,23 +10,98 @@ namespace SboxDumper;
 
 static class Program
 {
+    static string Version =>
+        Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
+
     static int Main(string[] args)
     {
-        Console.WriteLine("╔══════════════════════════════════════╗");
-        Console.WriteLine("║  DXRP / s&box Offset Dumper v3.0     ║");
-        Console.WriteLine("╚══════════════════════════════════════╝\n");
+        // ── CLI parsing: [processName] [--pid <id>] [--dma-path <path>] ──
+        string processName = "sbox";
+        int? pid = null;
+        var dmaPath = Environment.GetEnvironmentVariable("SBOX_DUMPER_DMA_PATH")
+                      ?? Path.Combine("..", "dma_offsets.json");
 
-        var processName = args.Length > 0 ? args[0] : "sbox";
-
-        // ── Find process ────────────────────────────────
-        var procs = Process.GetProcessesByName(processName);
-        if (procs.Length == 0)
+        for (int i = 0; i < args.Length; i++)
         {
-            Console.Error.WriteLine($"[!] '{processName}' not found.");
-            return 1;
+            switch (args[i])
+            {
+                case "--pid":
+                    if (i + 1 < args.Length && int.TryParse(args[i + 1], out var p))
+                    {
+                        pid = p;
+                        i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("[!] --pid requires a numeric argument.");
+                        return 2;
+                    }
+                    break;
+
+                case "--dma-path":
+                    if (i + 1 < args.Length)
+                    {
+                        dmaPath = args[i + 1];
+                        i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("[!] --dma-path requires a path argument.");
+                        return 2;
+                    }
+                    break;
+
+                case "--help":
+                case "-h":
+                    PrintUsage();
+                    return 0;
+
+                default:
+                    processName = args[i];
+                    break;
+            }
         }
 
-        var proc = procs[0];
+        var title = $"DXRP / s&box Offset Dumper v{Version}";
+        var pad = new string(' ', Math.Max(0, 34 - title.Length));
+        Console.WriteLine("╔══════════════════════════════════════╗");
+        Console.WriteLine($"║  {title}{pad}  ║");
+        Console.WriteLine("╚══════════════════════════════════════╝\n");
+
+        // ── Find process ────────────────────────────────
+        Process? proc;
+        if (pid is int targetPid)
+        {
+            try
+            {
+                proc = Process.GetProcessById(targetPid);
+            }
+            catch (ArgumentException)
+            {
+                Console.Error.WriteLine($"[!] No process with PID {targetPid}.");
+                return 1;
+            }
+        }
+        else
+        {
+            var procs = Process.GetProcessesByName(processName);
+            if (procs.Length == 0)
+            {
+                Console.Error.WriteLine($"[!] '{processName}' not found.");
+                return 1;
+            }
+
+            if (procs.Length > 1)
+            {
+                Console.Error.WriteLine($"[!] Multiple '{processName}' processes found ({procs.Length}). Re-run with --pid:");
+                foreach (var pr in procs)
+                    Console.Error.WriteLine($"    PID {pr.Id}  (started {pr.StartTime:HH:mm:ss})");
+                return 2;
+            }
+
+            proc = procs[0];
+        }
+
         Console.WriteLine($"[+] Attached: {proc.ProcessName}.exe (PID {proc.Id})\n");
 
         try
@@ -85,11 +161,20 @@ static class Program
             // DMA offsets for auto-updater (external reads this at startup)
             var dmaJson = JsonSerializer.Serialize(dump.DmaOffsets, jsonOpts);
             File.WriteAllText("output/dma_offsets.json", dmaJson);
-            // Shared location: tools/dma_offsets.json (sibling to sbox-dumper/)
-            try { File.WriteAllText(Path.Combine("..", "dma_offsets.json"), dmaJson); }
-            catch { /* non-critical — local copy exists */ }
 
-            Console.WriteLine($"\n[+] output/sbox_dump.json    ({json.Length:N0} bytes)");
+            // Shared location for the auto-updater — sibling to sbox-dumper/ by
+            // default; override with --dma-path or $SBOX_DUMPER_DMA_PATH.
+            try
+            {
+                File.WriteAllText(dmaPath, dmaJson);
+                Console.WriteLine($"[+] {dmaPath}  ({dmaJson.Length:N0} bytes) [auto-updater]");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[!] Could not write shared dma_offsets.json to {dmaPath}: {ex.Message} (output/dma_offsets.json is still written)");
+            }
+
+            Console.WriteLine($"[+] output/sbox_dump.json    ({json.Length:N0} bytes)");
             Console.WriteLine($"[+] output/offsets.json      ({offsetJson.Length:N0} bytes)");
             Console.WriteLine($"[+] output/dma_offsets.json  ({dmaJson.Length:N0} bytes) [auto-updater]");
             Console.WriteLine("[+] Done.");
@@ -102,6 +187,17 @@ static class Program
                 Console.Error.WriteLine("    Try running as Administrator.");
             return 1;
         }
+    }
+
+    static void PrintUsage()
+    {
+        Console.WriteLine("Usage: sbox-dumper [processName] [options]");
+        Console.WriteLine();
+        Console.WriteLine("  processName        Process to attach to (default: sbox)");
+        Console.WriteLine("  --pid <id>         Attach to a specific PID (use when multiple instances are running)");
+        Console.WriteLine("  --dma-path <path>  Where to write dma_offsets.json for the auto-updater");
+        Console.WriteLine("                     (default: ../dma_offsets.json, or $SBOX_DUMPER_DMA_PATH)");
+        Console.WriteLine("  -h, --help         Show this help");
     }
 
     static void DumpModules(DataTarget dt, DumpResult dump)
@@ -128,5 +224,4 @@ static class Program
         }
         Console.WriteLine();
     }
-
 }

@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore tests/SboxDumper.Tests/SboxDumper.Tests.csproj
+
+      - name: Build
+        run: dotnet build sbox-dumper.csproj -c Release --no-restore
+
+      - name: Test
+        run: dotnet test tests/SboxDumper.Tests/SboxDumper.Tests.csproj -c Release --no-restore

@@ -5,3 +5,7 @@ output/
 *.dll
 *.exe
 *.pdb
+
+.vs/
+*.user
+.DS_Store

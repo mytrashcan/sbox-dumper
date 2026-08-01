@@ -9,7 +9,7 @@
 ## Features
 
 - **Single-pass heap walk** — collects type cache, player objects, and component mappings in one enumeration
-- Managed object field offsets for 15 target types
+- Managed object field offsets for 20 target types
 - Condensed DMA offset map with clean field names
 - Live DXRP player extraction (identity, economy, stats, health, armor, transform)
 - Equipment & component references per player
@@ -105,6 +105,19 @@ Or run the compiled executable directly:
 ./bin/Release/net10.0/sbox-dumper.exe
 ```
 
+### Options
+
+| Option | Description |
+|---|---|
+| `--pid <id>` | Attach to a specific PID. Required when multiple `sbox` instances are running. |
+| `--dma-path <path>` | Where to write `dma_offsets.json` for the auto-updater (default: `../dma_offsets.json`, or `$SBOX_DUMPER_DMA_PATH`). |
+| `-h`, `--help` | Show usage. |
+
+```bash
+sbox-dumper --pid 12345
+sbox-dumper sbox --dma-path ../shared/dma_offsets.json
+```
+
 ---
 
 ## Output
@@ -114,7 +127,8 @@ The tool creates an `output/` directory containing:
 | File | Description |
 |---|---|
 | `sbox_dump.json` | Full dump: modules, offsets, DMA map, player data |
-| `offsets.json` | Offset tables only (all 15 target types with fields) |
+| `offsets.json` | Offset tables only (all 20 target types with fields) |
+| `dma_offsets.json` | Condensed DMA map for the external auto-updater (also copied to `../dma_offsets.json` by default) |
 
 ### offsets.json structure
 
