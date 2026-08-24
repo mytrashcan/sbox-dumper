@@ -44,6 +44,11 @@ static class OffsetDumper
             {
                 TypeName = typeName,
                 MethodTable = $"0x{type.MethodTable:X}",
+                // BaseSize = total instance size incl. MethodTable pointer.
+                // NOTE: in ClrMD 3.x this is `StaticSize` — its documented
+                // meaning is "the size of objects of this type when created on
+                // the CLR heap" (MethodTable base size). It was renamed to
+                // BaseSize only in ClrMD 4.0. StaticFields is a separate list.
                 BaseSize = type.StaticSize,
                 Parent = type.BaseType?.Name,
             };

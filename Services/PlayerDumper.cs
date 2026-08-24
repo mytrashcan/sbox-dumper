@@ -1,5 +1,6 @@
 using Microsoft.Diagnostics.Runtime;
 using SboxDumper.Models;
+using SboxDumper.Readers;
 using static SboxDumper.Readers.FieldReaders;
 
 namespace SboxDumper.Services;
@@ -277,7 +278,13 @@ static class PlayerDumper
                 Rotation = rot,
             };
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            // Don't hide real errors entirely: log once per failure class.
+            FieldReaders.WarnOnce($"transform-read-{ex.GetType().Name}",
+                $"[!] ReadTransformData @ 0x{gtObj.Address:X}: {ex.GetType().Name}: {ex.Message}");
+            return null;
+        }
     }
 
     static Vec3 ReadVec3(byte[] buf, int off) => new()
