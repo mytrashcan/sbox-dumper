@@ -20,6 +20,7 @@ static class Program
         int? pid = null;
         var dmaPath = Environment.GetEnvironmentVariable("SBOX_DUMPER_DMA_PATH")
                       ?? Path.Combine("..", "dma_offsets.json");
+        bool suspend = true;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -51,6 +52,10 @@ static class Program
                     }
                     break;
 
+                case "--no-suspend":
+                    suspend = false;
+                    break;
+
                 case "--help":
                 case "-h":
                     PrintUsage();
@@ -69,45 +74,61 @@ static class Program
         Console.WriteLine("╚══════════════════════════════════════╝\n");
 
         // ── Find process ────────────────────────────────
-        Process? proc;
-        if (pid is int targetPid)
+        Process? proc = null;
+        Process[]? procs = null;
+        try
         {
-            try
+            if (pid is int targetPid)
             {
-                proc = Process.GetProcessById(targetPid);
+                try
+                {
+                    proc = Process.GetProcessById(targetPid);
+                }
+                catch (ArgumentException)
+                {
+                    Console.Error.WriteLine($"[!] No process with PID {targetPid}.");
+                    return 1;
+                }
             }
-            catch (ArgumentException)
+            else
             {
-                Console.Error.WriteLine($"[!] No process with PID {targetPid}.");
-                return 1;
+                procs = Process.GetProcessesByName(processName);
+                if (procs.Length == 0)
+                {
+                    Console.Error.WriteLine($"[!] '{processName}' not found.");
+                    return 1;
+                }
+
+                if (procs.Length > 1)
+                {
+                    Console.Error.WriteLine($"[!] Multiple '{processName}' processes found ({procs.Length}). Re-run with --pid:");
+                    foreach (var pr in procs)
+                        Console.Error.WriteLine($"    PID {pr.Id}  (started {pr.StartTime:HH:mm:ss})");
+                    return 2;
+                }
+
+                proc = procs[0];
             }
+
+            Console.WriteLine($"[+] Attached: {proc.ProcessName}.exe (PID {proc.Id})\n");
+
+            return Run(dmaPath, suspend, proc);
         }
-        else
+        finally
         {
-            var procs = Process.GetProcessesByName(processName);
-            if (procs.Length == 0)
-            {
-                Console.Error.WriteLine($"[!] '{processName}' not found.");
-                return 1;
-            }
-
-            if (procs.Length > 1)
-            {
-                Console.Error.WriteLine($"[!] Multiple '{processName}' processes found ({procs.Length}). Re-run with --pid:");
-                foreach (var pr in procs)
-                    Console.Error.WriteLine($"    PID {pr.Id}  (started {pr.StartTime:HH:mm:ss})");
-                return 2;
-            }
-
-            proc = procs[0];
+            // Dispose every handle we opened, on all paths.
+            foreach (var p in procs ?? [])
+                p.Dispose();
+            proc?.Dispose();
         }
+    }
 
-        Console.WriteLine($"[+] Attached: {proc.ProcessName}.exe (PID {proc.Id})\n");
-
+    static int Run(string dmaPath, bool suspend, Process proc)
+    {
         try
         {
             // ── Attach ClrMD ────────────────────────────
-            using var dt = DataTarget.AttachToProcess(proc.Id, suspend: false);
+            using var dt = DataTarget.AttachToProcess(proc.Id, suspend);
             var clrInfo = dt.ClrVersions.FirstOrDefault();
             if (clrInfo is null)
             {
@@ -195,6 +216,8 @@ static class Program
         Console.WriteLine();
         Console.WriteLine("  processName        Process to attach to (default: sbox)");
         Console.WriteLine("  --pid <id>         Attach to a specific PID (use when multiple instances are running)");
+        Console.WriteLine("  --no-suspend       Do NOT suspend the target during the dump (default: suspended,");
+        Console.WriteLine("                     which avoids torn reads on a live heap)");
         Console.WriteLine("  --dma-path <path>  Where to write dma_offsets.json for the auto-updater");
         Console.WriteLine("                     (default: ../dma_offsets.json, or $SBOX_DUMPER_DMA_PATH)");
         Console.WriteLine("  -h, --help         Show this help");

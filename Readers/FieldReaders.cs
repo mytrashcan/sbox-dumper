@@ -126,24 +126,52 @@ static class FieldReaders
             var field = obj.Type?.GetFieldByName(fieldName);
             if (field is null) return null;
 
-            var bytes = new byte[20];
-            // Nullable<Guid> layout: hasValue(1) + pad(3) + Guid(16) = 20 bytes.
+            // Raw read for Nullable<Guid>: hasValue(1) + pad(3) + Guid(16).
             // ClrMD field offsets are relative to the object DATA start, so the
-            // +8 is the object's MethodTable pointer — not a magic skip.
-            // bytes[0] = hasValue; the Guid occupies bytes[4..20].
-            // (Cross-checked against sbox-external's faction read: same address
-            //  formula obj + MtPtr + fieldOffset, same field layout.)
+            // +8 is the object's MethodTable pointer. (ClrMD has no typed
+            // Nullable<T> read, so we validate the layout explicitly below
+            // instead of silently emitting garbage GUIDs.)
+            var bytes = new byte[20];
             var addr = obj.Address + (ulong)field.Offset + 8;
             var dt = field.Type?.Heap?.Runtime?.DataTarget;
             if (dt == null) return null;
 
-            dt.DataReader.Read(addr, bytes);
-            if (bytes[0] == 0) return null;
+            int read = dt.DataReader.Read(addr, bytes);
+            if (read < bytes.Length)
+                return WarnOnce("guid-short-read", $"[!] {fieldName}: short read ({read}/{bytes.Length} bytes); skipping GUID.");
 
-            var guid = new Guid(bytes.AsSpan(4, 16));
-            return guid.ToString();
+            byte hasValue = bytes[0];
+            if (hasValue == 0) return null;
+            if (hasValue != 1)
+                return WarnOnce("guid-bad-hasvalue", $"[!] {fieldName}: Nullable<Guid>.hasValue = 0x{hasValue:X2} (expected 0/1); memory likely torn or offset stale; skipping GUID.");
+
+            var guidBytes = bytes.AsSpan(4, 16);
+            bool allZero = true, allFF = true;
+            foreach (var b in guidBytes)
+            {
+                if (b != 0x00) allZero = false;
+                if (b != 0xFF) allFF = false;
+            }
+            if (allZero || allFF)
+                return WarnOnce("guid-degenerate", $"[!] {fieldName}: GUID bytes are all-zero/all-FF with hasValue=1; memory likely torn or offset stale; treating as unset.");
+
+            return new Guid(guidBytes).ToString();
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            WarnOnce("guid-exception", $"[!] TryReadGuid({fieldName}): {ex.GetType().Name}: {ex.Message}");
+            return null;
+        }
+    }
+
+    static readonly HashSet<string> _warned = [];
+
+    /// Logs a warning once per failure class so repeated per-player errors don't spam output.
+    internal static string? WarnOnce(string failureClass, string message)
+    {
+        if (_warned.Add(failureClass))
+            Console.Error.WriteLine(message);
+        return null;
     }
 
     // ── Type hierarchy helpers ──────────────────────────
