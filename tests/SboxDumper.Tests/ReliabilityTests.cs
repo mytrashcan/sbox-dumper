@@ -26,8 +26,8 @@ public class ReliabilityTests
         };
         // Use the runtime already hosting these tests, including private SDKs.
         string runtimeRoot = Path.GetFullPath(Path.Combine(RuntimeEnvironment.GetRuntimeDirectory(), "..", "..", ".."));
-        start.Environment["DOTNET_ROOT"] = runtimeRoot;
-        start.Environment["DOTNET_ROOT_X64"] = runtimeRoot;
+        foreach (string key in new[] { "DOTNET_ROOT", "DOTNET_ROOT_X64", "DOTNET_ROOT_X86", "DOTNET_ROOT_ARM64", "DOTNET_ROOT(x86)" })
+            start.Environment[key] = runtimeRoot;
         using var process = Process.Start(start)!;
         try
         {
