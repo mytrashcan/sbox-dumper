@@ -18,6 +18,14 @@
 
   <ItemGroup>
     <ProjectReference Include="../../sbox-dumper.csproj" />
+    <ProjectReference Include="../SboxDumper.Fixture/SboxDumper.Fixture.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
+
+  <Target Name="CopyFixture" AfterTargets="Build">
+    <ItemGroup>
+      <FixtureFiles Include="../SboxDumper.Fixture/bin/$(Configuration)/net10.0/SboxDumper.Fixture.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(FixtureFiles)" DestinationFolder="$(OutDir)fixture" />
+  </Target>
 
 </Project>

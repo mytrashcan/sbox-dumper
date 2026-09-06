@@ -21,9 +21,9 @@ static class PlayerDumper
             if (!goObj.IsValid) continue;
 
             var goName = TryReadString(goObj, "_name");
-            bool startCalled = TryReadBool(obj, "_startCalled");
+            var startCalled = TryReadBool(obj, "_startCalled");
             var steamId = TryReadInt64(obj, "<SteamId>k__BackingField");
-            if (steamId == 0 && !startCalled) continue;
+            if (steamId == 0 && startCalled == false) continue;
 
             Console.WriteLine($"\n  ── Player: \"{goName}\" ──");
 
@@ -238,45 +238,18 @@ static class PlayerDumper
         return a;
     }
 
-    static TransformDump? ReadTransformData(ClrRuntime runtime, ClrObject gtObj)
+    internal static TransformDump? ReadTransformData(ClrRuntime runtime, ClrObject gtObj)
     {
-        var targetField = gtObj.Type?.GetFieldByName("_targetLocal");
-        if (targetField == null) return null;
-
-        int baseOffset = targetField.Offset;
-        var addr = gtObj.Address;
-
         try
         {
-            // _targetLocal is an inline value type; read its raw struct bytes
-            // (pos/scale/rot) directly from memory. +8 = the object's
-            // MethodTable pointer (ClrMD field offsets are relative to the
-            // object data start). The fallback below re-reads without it when
-            // the result looks degenerate (all-zero/NaN) — defensive, since
-            // the reported field offset can shift between game versions.
+            var targetField = gtObj.Type?.GetFieldByName("_targetLocal")
+                ?? throw new MissingFieldException("_targetLocal");
+            int baseOffset = targetField.Offset;
+            if (!targetField.IsValueType || targetField.Size != 40)
+                throw new InvalidDataException("Unsupported Transform layout; expected a 40-byte value type.");
             var rawBytes = new byte[40];
-            runtime.DataTarget.DataReader.Read(addr + (ulong)baseOffset + 8, rawBytes);
-
-            var pos   = ReadVec3(rawBytes, 0);
-            var scale = ReadVec3(rawBytes, 12);
-            var rot   = ReadVec4(rawBytes, 24);
-
-            // Sanity: if all zeros or NaN, try without MT offset
-            if (float.IsNaN(pos.X) || (pos.X == 0 && pos.Y == 0 && pos.Z == 0 && scale.X == 0))
-            {
-                runtime.DataTarget.DataReader.Read(addr + (ulong)baseOffset, rawBytes);
-                pos   = ReadVec3(rawBytes, 0);
-                scale = ReadVec3(rawBytes, 12);
-                rot   = ReadVec4(rawBytes, 24);
-            }
-
-            return new TransformDump
-            {
-                FieldOffset = baseOffset,
-                Position = pos,
-                Scale = scale,
-                Rotation = rot,
-            };
+            int read = runtime.DataTarget.DataReader.Read(targetField.GetAddress(gtObj.Address, interior: false), rawBytes);
+            return DecodeTransform(rawBytes, read, baseOffset);
         }
         catch (Exception ex)
         {
@@ -285,6 +258,30 @@ static class PlayerDumper
                 $"[!] ReadTransformData @ 0x{gtObj.Address:X}: {ex.GetType().Name}: {ex.Message}");
             return null;
         }
+    }
+
+    internal static TransformDump? DecodeTransform(byte[] bytes, int bytesRead, int fieldOffset)
+    {
+        if (bytesRead != 40 || bytes.Length < 40)
+        {
+            WarnOnce("transform-short-read", $"[!] Transform: short read ({bytesRead}/40 bytes).");
+            return null;
+        }
+        for (int offset = 0; offset < 40; offset += 4)
+        {
+            if (!float.IsFinite(BitConverter.ToSingle(bytes, offset)))
+            {
+                WarnOnce("transform-non-finite", "[!] Transform contains NaN or infinity; skipping.");
+                return null;
+            }
+        }
+        return new TransformDump
+        {
+            FieldOffset = fieldOffset,
+            Position = ReadVec3(bytes, 0),
+            Scale = ReadVec3(bytes, 12),
+            Rotation = ReadVec4(bytes, 24),
+        };
     }
 
     static Vec3 ReadVec3(byte[] buf, int off) => new()

@@ -9,7 +9,7 @@ class PlayerDump
     public string? ControllerAddress { get; set; }
 
     // Identity
-    public long SteamId { get; set; }
+    public long? SteamId { get; set; }
     public string? SteamName { get; set; }
     public string? RpName { get; set; }
     public string? PreferredTitle { get; set; }
@@ -19,27 +19,27 @@ class PlayerDump
     public JobDump? Job { get; set; }
 
     // Economy
-    public uint WalletBalance { get; set; }
-    public uint BankBalance { get; set; }
-    public int Level { get; set; }
+    public uint? WalletBalance { get; set; }
+    public uint? BankBalance { get; set; }
+    public int? Level { get; set; }
 
     // Stats
-    public int Kills { get; set; }
-    public int Deaths { get; set; }
-    public int PlayTime { get; set; }
+    public int? Kills { get; set; }
+    public int? Deaths { get; set; }
+    public int? PlayTime { get; set; }
 
     // State
-    public bool IsTyping { get; set; }
-    public bool Restricted { get; set; }
-    public bool IsThirdPerson { get; set; }
-    public bool IsDebugPlayer { get; set; }
-    public float Spread { get; set; }
+    public bool? IsTyping { get; set; }
+    public bool? Restricted { get; set; }
+    public bool? IsThirdPerson { get; set; }
+    public bool? IsDebugPlayer { get; set; }
+    public float? Spread { get; set; }
 
     // Controller state
-    public bool IsDucking { get; set; }
-    public bool IsClimbing { get; set; }
-    public bool IsSwimming { get; set; }
-    public bool IsOnGround { get; set; }
+    public bool? IsDucking { get; set; }
+    public bool? IsClimbing { get; set; }
+    public bool? IsSwimming { get; set; }
+    public bool? IsOnGround { get; set; }
 
     // Faction
     public string? FactionId { get; set; }
@@ -69,26 +69,26 @@ class JobDump
     public string? Title { get; set; }
     public string? Description { get; set; }
     public string? Category { get; set; }
-    public int Salary { get; set; }
-    public int MaxSlots { get; set; }
+    public int? Salary { get; set; }
+    public int? MaxSlots { get; set; }
     public string? ResourceName { get; set; }
     public string? ResourcePath { get; set; }
 }
 
 class HealthDump
 {
-    public float Current { get; set; }
-    public float Max { get; set; }
-    public bool IsDead { get; set; }
-    public int LifeState { get; set; }
-    public bool IsGodMode { get; set; }
+    public float? Current { get; set; }
+    public float? Max { get; set; }
+    public bool? IsDead { get; set; }
+    public int? LifeState { get; set; }
+    public bool? IsGodMode { get; set; }
 }
 
 class ArmorDump
 {
-    public float Current { get; set; }
-    public float Max { get; set; }
-    public bool HasHelmet { get; set; }
+    public float? Current { get; set; }
+    public float? Max { get; set; }
+    public bool? HasHelmet { get; set; }
 }
 
 class TransformDump

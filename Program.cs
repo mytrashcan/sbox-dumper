@@ -1,7 +1,5 @@
 using System.Diagnostics;
 using System.Reflection;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.Diagnostics.Runtime;
 using SboxDumper.Models;
 using SboxDumper.Services;
@@ -15,58 +13,23 @@ static class Program
 
     static int Main(string[] args)
     {
-        // ── CLI parsing: [processName] [--pid <id>] [--dma-path <path>] ──
-        string processName = "sbox";
-        int? pid = null;
-        var dmaPath = Environment.GetEnvironmentVariable("SBOX_DUMPER_DMA_PATH")
-                      ?? Path.Combine("..", "dma_offsets.json");
-        bool suspend = true;
-
-        for (int i = 0; i < args.Length; i++)
+        CliOptions options;
+        try
         {
-            switch (args[i])
-            {
-                case "--pid":
-                    if (i + 1 < args.Length && int.TryParse(args[i + 1], out var p))
-                    {
-                        pid = p;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("[!] --pid requires a numeric argument.");
-                        return 2;
-                    }
-                    break;
-
-                case "--dma-path":
-                    if (i + 1 < args.Length)
-                    {
-                        dmaPath = args[i + 1];
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("[!] --dma-path requires a path argument.");
-                        return 2;
-                    }
-                    break;
-
-                case "--no-suspend":
-                    suspend = false;
-                    break;
-
-                case "--help":
-                case "-h":
-                    PrintUsage();
-                    return 0;
-
-                default:
-                    processName = args[i];
-                    break;
-            }
+            options = CliOptions.Parse(args, Environment.GetEnvironmentVariable("SBOX_DUMPER_DMA_PATH"));
         }
-
+        catch (ArgumentException ex)
+        {
+            Console.Error.WriteLine($"[!] {ex.Message}");
+            return 2;
+        }
+        if (options.Help)
+        {
+            PrintUsage();
+            return 0;
+        }
+        string processName = options.ProcessName;
+        int? pid = options.Pid;
         var title = $"DXRP / s&box Offset Dumper v{Version}";
         var pad = new string(' ', Math.Max(0, 34 - title.Length));
         Console.WriteLine("╔══════════════════════════════════════╗");
@@ -110,16 +73,21 @@ static class Program
                 proc = procs[0];
             }
 
-            Console.WriteLine($"[+] Attached: {proc.ProcessName}.exe (PID {proc.Id})\n");
+            Console.WriteLine($"[+] Target: {proc.ProcessName}.exe (PID {proc.Id})\n");
 
-            return Run(dmaPath, suspend, proc);
+            return Run(options.DmaPath, options.Suspend, proc);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[!] {ex.GetType().Name}: {ex.Message}");
+            return 1;
         }
         finally
         {
             // Dispose every handle we opened, on all paths.
             foreach (var p in procs ?? [])
                 p.Dispose();
-            proc?.Dispose();
+            if (procs is null) proc?.Dispose();
         }
     }
 
@@ -127,79 +95,51 @@ static class Program
     {
         try
         {
+            SboxDumper.Readers.FieldReaders.ResetWarnings();
+            DumpResult dump;
             // ── Attach ClrMD ────────────────────────────
-            using var dt = DataTarget.AttachToProcess(proc.Id, suspend);
-            var clrInfo = dt.ClrVersions.FirstOrDefault();
-            if (clrInfo is null)
+            using (var dt = DataTarget.AttachToProcess(proc.Id, suspend))
             {
-                Console.Error.WriteLine("[!] No CLR runtime found. Is the game fully loaded?");
-                return 1;
-            }
+                var clrInfo = dt.ClrVersions.FirstOrDefault();
+                if (clrInfo is null)
+                {
+                    Console.Error.WriteLine("[!] No CLR runtime found. Is the game fully loaded?");
+                    return 1;
+                }
 
-            using var runtime = clrInfo.CreateRuntime();
-            Console.WriteLine($"[+] CLR Version: {runtime.ClrInfo.Version}\n");
+                using var runtime = clrInfo.CreateRuntime();
+                if (!runtime.Heap.CanWalkHeap) throw new InvalidOperationException("CLR heap cannot be walked.");
+                Console.WriteLine($"[+] CLR Version: {runtime.ClrInfo.Version}\n");
 
-            var dump = new DumpResult
-            {
-                Process = proc.ProcessName,
-                Pid = proc.Id,
-                DumpedAt = DateTime.UtcNow.ToString("o"),
-                ClrVersion = runtime.ClrInfo.Version.ToString(),
-            };
+                dump = new DumpResult
+                {
+                    Process = proc.ProcessName,
+                    Pid = proc.Id,
+                    TargetSuspended = suspend,
+                    DumpedAt = DateTime.UtcNow.ToString("o"),
+                    ClrVersion = runtime.ClrInfo.Version.ToString(),
+                };
 
-            // ── Modules ─────────────────────────────────
-            DumpModules(dt, dump);
+                // ── Modules ─────────────────────────────────
+                DumpModules(dt, dump);
 
-            // ── Single-pass heap walk ───────────────────
-            Console.WriteLine("── Heap Walk (single pass) ──────────────────────────");
-            var sw = Stopwatch.StartNew();
-            var snapshot = HeapWalker.Walk(runtime.Heap);
-            sw.Stop();
-            Console.WriteLine($"  Completed in {sw.ElapsedMilliseconds}ms\n");
+                // ── Single-pass heap walk ───────────────────
+                Console.WriteLine("── Heap Walk (single pass) ──────────────────────────");
+                var sw = Stopwatch.StartNew();
+                var snapshot = HeapWalker.Walk(runtime.Heap);
+                sw.Stop();
+                Console.WriteLine($"  Completed in {sw.ElapsedMilliseconds}ms\n");
 
-            // ── Offsets (from type cache, no heap walk) ─
-            OffsetDumper.Dump(snapshot, dump);
+                // ── Offsets (from type cache, no heap walk) ─
+                OffsetDumper.Dump(snapshot, dump);
 
-            // ── Players (from collected objects, no heap walk) ─
-            PlayerDumper.Dump(runtime, snapshot, dump);
+                // ── Players (from collected objects, no heap walk) ─
+                PlayerDumper.Dump(runtime, snapshot, dump);
 
-            // ── Write JSON ──────────────────────────────
-            var jsonOpts = new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-            };
+                dump.ReadWarnings = SboxDumper.Readers.FieldReaders.Warnings.ToList();
+            } // Resume the target before serialization or disk I/O.
 
-            Directory.CreateDirectory("output");
-
-            var json = JsonSerializer.Serialize(dump, jsonOpts);
-            File.WriteAllText("output/sbox_dump.json", json);
-
-            var offsetJson = JsonSerializer.Serialize(dump.Offsets, jsonOpts);
-            File.WriteAllText("output/offsets.json", offsetJson);
-
-            // DMA offsets for auto-updater (external reads this at startup)
-            var dmaJson = JsonSerializer.Serialize(dump.DmaOffsets, jsonOpts);
-            File.WriteAllText("output/dma_offsets.json", dmaJson);
-
-            // Shared location for the auto-updater — sibling to sbox-dumper/ by
-            // default; override with --dma-path or $SBOX_DUMPER_DMA_PATH.
-            try
-            {
-                File.WriteAllText(dmaPath, dmaJson);
-                Console.WriteLine($"[+] {dmaPath}  ({dmaJson.Length:N0} bytes) [auto-updater]");
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[!] Could not write shared dma_offsets.json to {dmaPath}: {ex.Message} (output/dma_offsets.json is still written)");
-            }
-
-            Console.WriteLine($"[+] output/sbox_dump.json    ({json.Length:N0} bytes)");
-            Console.WriteLine($"[+] output/offsets.json      ({offsetJson.Length:N0} bytes)");
-            Console.WriteLine($"[+] output/dma_offsets.json  ({dmaJson.Length:N0} bytes) [auto-updater]");
-            Console.WriteLine("[+] Done.");
-            return 0;
+            return DumpWriter.Write(dump, "output", dmaPath);
         }
         catch (Exception ex)
         {
