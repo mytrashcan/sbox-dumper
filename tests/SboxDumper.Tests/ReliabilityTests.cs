@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Microsoft.Diagnostics.Runtime;
 using SboxDumper.Models;
 using SboxDumper.Readers;
@@ -14,14 +15,19 @@ public class ReliabilityTests
     [Fact]
     public async Task ClrMdReadsRealManagedFieldsAndResumesFixture()
     {
-        string fixture = Path.Combine(AppContext.BaseDirectory, "fixture", "SboxDumper.Fixture.dll");
-        var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet")
+        // Launch the apphost built with this test assembly, never an executable
+        // selected by DOTNET_HOST_PATH or PATH from the calling environment.
+        string fixture = Path.Combine(AppContext.BaseDirectory, "fixture", "SboxDumper.Fixture.exe");
+        var start = new ProcessStartInfo(fixture)
         {
             UseShellExecute = false,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
         };
-        start.ArgumentList.Add(fixture);
+        // Use the runtime already hosting these tests, including private SDKs.
+        string runtimeRoot = Path.GetFullPath(Path.Combine(RuntimeEnvironment.GetRuntimeDirectory(), "..", "..", ".."));
+        start.Environment["DOTNET_ROOT"] = runtimeRoot;
+        start.Environment["DOTNET_ROOT_X64"] = runtimeRoot;
         using var process = Process.Start(start)!;
         try
         {
@@ -242,7 +248,9 @@ public class ReliabilityTests
 
     sealed class TestDirectory : IDisposable
     {
-        public string Path { get; } = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "SboxDumper.Tests", Guid.NewGuid().ToString("N"));
+        // Keep creation and recursive cleanup inside our own build output;
+        // TMP/TEMP must not redirect filesystem operations elsewhere.
+        public string Path { get; } = System.IO.Path.Combine(AppContext.BaseDirectory, "test-output", Guid.NewGuid().ToString("N"));
         public TestDirectory() => Directory.CreateDirectory(Path);
         public void Dispose() => Directory.Delete(Path, recursive: true);
     }
