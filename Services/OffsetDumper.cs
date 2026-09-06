@@ -38,7 +38,11 @@ static class OffsetDumper
 
         foreach (var (typeName, category) in Targets)
         {
-            if (!snap.TypeCache.TryGetValue(typeName, out var type)) continue;
+            if (!snap.TypeCache.TryGetValue(typeName, out var type))
+            {
+                RecordMissing(dump, category, typeName);
+                continue;
+            }
 
             var entry = new OffsetTableEntry
             {
@@ -203,7 +207,11 @@ static class OffsetDumper
     {
         if (!dump.Offsets.TryGetValue(category, out var table)) return;
         var field = table.Fields.FirstOrDefault(f => f.Name == fieldName);
-        if (field == null) return;
+        if (field == null || field.Offset < 0 || field.Size <= 0)
+        {
+            RecordMissing(dump, category, $"{category}.{fieldName}");
+            return;
+        }
 
         if (!dump.DmaOffsets.ContainsKey(category))
             dump.DmaOffsets[category] = new();
@@ -215,5 +223,12 @@ static class OffsetDumper
             Type = field.Type,
             Size = field.Size,
         };
+    }
+
+    static void RecordMissing(DumpResult dump, string category, string name)
+    {
+        dump.MissingOffsets.Add(name);
+        if (category is "GameObject" or "GameTransform" or "DxrpPlayer")
+            dump.MissingRequiredOffsets.Add(name);
     }
 }

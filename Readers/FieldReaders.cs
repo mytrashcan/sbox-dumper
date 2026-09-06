@@ -3,7 +3,7 @@ using Microsoft.Diagnostics.Runtime;
 namespace SboxDumper.Readers;
 
 /// Thin wrappers around ClrMD field reads.
-/// Every method swallows exceptions — partial data beats a crash.
+/// Failed primitive reads are null and recorded in the dump diagnostics.
 static class FieldReaders
 {
     // ── Object reference fields ─────────────────────────
@@ -14,11 +14,16 @@ static class FieldReaders
         try
         {
             var field = obj.Type?.GetFieldByName(fieldName);
-            if (field is null || field.IsValueType) return false;
+            if (field is null) throw new MissingFieldException(fieldName);
+            if (field.IsValueType) throw new InvalidDataException($"{fieldName} is not an object reference.");
             result = field.ReadObject(obj.Address, interior: false);
             return result.IsValid;
         }
-        catch { return false; }
+        catch (Exception ex)
+        {
+            WarnOnce(fieldName, $"[!] {fieldName}: {ex.GetType().Name}: {ex.Message}");
+            return false;
+        }
     }
 
     // ── String ──────────────────────────────────────────
@@ -28,12 +33,15 @@ static class FieldReaders
         try
         {
             var field = obj.Type?.GetFieldByName(fieldName);
-            if (field is null) return null;
+            if (field is null) throw new MissingFieldException(fieldName);
             var strObj = field.ReadObject(obj.Address, interior: false);
             if (!strObj.IsValid || strObj.Type?.Name != "System.String") return null;
             return strObj.AsString();
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            return WarnOnce(fieldName, $"[!] {fieldName}: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     public static string? TryReadStringField(ClrObject obj, ClrInstanceField f)
@@ -44,79 +52,53 @@ static class FieldReaders
             if (!strObj.IsValid || strObj.Type?.Name != "System.String") return null;
             return strObj.AsString();
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            return WarnOnce(f.Name ?? "string-read", $"[!] {f.Name}: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     // ── Primitives ──────────────────────────────────────
 
-    public static bool TryReadBool(ClrObject obj, string fieldName)
+    // Unknown values stay null rather than masquerading as zero or false.
+    internal static T? ReadPrimitive<T>(Func<T> read, string context) where T : unmanaged
     {
         try
         {
-            var field = obj.Type?.GetFieldByName(fieldName);
-            return field != null && field.Read<bool>(obj.Address, interior: false);
+            T value = read();
+            if (value is float number && !float.IsFinite(number))
+                throw new InvalidDataException("Non-finite floating-point value.");
+            return value;
         }
-        catch { return false; }
-    }
-
-    public static bool TryReadBoolField(ClrObject obj, ClrInstanceField f)
-    {
-        try { return f.Read<bool>(obj.Address, interior: false); }
-        catch { return false; }
-    }
-
-    public static int TryReadInt32(ClrObject obj, string fieldName)
-    {
-        try
+        catch (Exception ex)
         {
-            var field = obj.Type?.GetFieldByName(fieldName);
-            return field?.Read<int>(obj.Address, interior: false) ?? 0;
+            WarnOnce(context, $"[!] {context}: {ex.GetType().Name}: {ex.Message}");
+            return null;
         }
-        catch { return 0; }
     }
 
-    public static int TryReadInt32Field(ClrObject obj, ClrInstanceField f)
+    static T? ReadPrimitive<T>(ClrObject obj, string name) where T : unmanaged =>
+        ReadPrimitive(() => ReadPrimitiveValue<T>(obj, obj.Type?.GetFieldByName(name), name), name);
+
+    static T? ReadPrimitive<T>(ClrObject obj, ClrInstanceField? field, string name) where T : unmanaged =>
+        ReadPrimitive(() => ReadPrimitiveValue<T>(obj, field, name), name);
+
+    static T ReadPrimitiveValue<T>(ClrObject obj, ClrInstanceField? field, string name) where T : unmanaged
     {
-        try { return f.Read<int>(obj.Address, interior: false); }
-        catch { return 0; }
+        if (field is null) throw new MissingFieldException(name);
+        if (field.Type?.Name != typeof(T).FullName)
+            throw new InvalidDataException($"Expected {typeof(T).FullName}, got {field.Type?.Name}.");
+        return field.Read<T>(obj.Address, interior: false);
     }
 
-    public static uint TryReadUInt32(ClrObject obj, string fieldName)
-    {
-        try
-        {
-            var field = obj.Type?.GetFieldByName(fieldName);
-            return field?.Read<uint>(obj.Address, interior: false) ?? 0;
-        }
-        catch { return 0; }
-    }
-
-    public static long TryReadInt64(ClrObject obj, string fieldName)
-    {
-        try
-        {
-            var field = obj.Type?.GetFieldByName(fieldName);
-            return field?.Read<long>(obj.Address, interior: false) ?? 0;
-        }
-        catch { return 0; }
-    }
-
-    public static float TryReadFloat(ClrObject obj, string fieldName)
-    {
-        try
-        {
-            var field = obj.Type?.GetFieldByName(fieldName);
-            return field?.Read<float>(obj.Address, interior: false) ?? 0;
-        }
-        catch { return 0; }
-    }
-
-    public static float TryReadFloatField(ClrObject obj, ClrInstanceField f)
-    {
-        try { return f.Read<float>(obj.Address, interior: false); }
-        catch { return 0; }
-    }
-
+    public static bool? TryReadBool(ClrObject obj, string name) => ReadPrimitive<bool>(obj, name);
+    public static bool? TryReadBoolField(ClrObject obj, ClrInstanceField f) => ReadPrimitive<bool>(obj, f, f.Name ?? "?");
+    public static int? TryReadInt32(ClrObject obj, string name) => ReadPrimitive<int>(obj, name);
+    public static int? TryReadInt32Field(ClrObject obj, ClrInstanceField f) => ReadPrimitive<int>(obj, f, f.Name ?? "?");
+    public static uint? TryReadUInt32(ClrObject obj, string name) => ReadPrimitive<uint>(obj, name);
+    public static long? TryReadInt64(ClrObject obj, string name) => ReadPrimitive<long>(obj, name);
+    public static float? TryReadFloat(ClrObject obj, string name) => ReadPrimitive<float>(obj, name);
+    public static float? TryReadFloatField(ClrObject obj, ClrInstanceField f) => ReadPrimitive<float>(obj, f, f.Name ?? "?");
     // ── Nullable<Guid> ──────────────────────────────────
 
     public static string? TryReadGuid(ClrObject obj, string fieldName)
@@ -124,15 +106,15 @@ static class FieldReaders
         try
         {
             var field = obj.Type?.GetFieldByName(fieldName);
-            if (field is null) return null;
+            if (field is null) throw new MissingFieldException(fieldName);
 
             // Raw read for Nullable<Guid>: hasValue(1) + pad(3) + Guid(16).
-            // ClrMD field offsets are relative to the object DATA start, so the
-            // +8 is the object's MethodTable pointer. (ClrMD has no typed
-            // Nullable<T> read, so we validate the layout explicitly below
-            // instead of silently emitting garbage GUIDs.)
+            // Let ClrMD calculate the field address including the object header.
+            if (!field.IsValueType || field.Size != 20 ||
+                field.Type?.Name != "System.Nullable<System.Guid>")
+                throw new InvalidDataException("Unsupported Nullable<Guid> layout.");
             var bytes = new byte[20];
-            var addr = obj.Address + (ulong)field.Offset + 8;
+            var addr = field.GetAddress(obj.Address, interior: false);
             var dt = field.Type?.Heap?.Runtime?.DataTarget;
             if (dt == null) return null;
 
@@ -146,15 +128,6 @@ static class FieldReaders
                 return WarnOnce("guid-bad-hasvalue", $"[!] {fieldName}: Nullable<Guid>.hasValue = 0x{hasValue:X2} (expected 0/1); memory likely torn or offset stale; skipping GUID.");
 
             var guidBytes = bytes.AsSpan(4, 16);
-            bool allZero = true, allFF = true;
-            foreach (var b in guidBytes)
-            {
-                if (b != 0x00) allZero = false;
-                if (b != 0xFF) allFF = false;
-            }
-            if (allZero || allFF)
-                return WarnOnce("guid-degenerate", $"[!] {fieldName}: GUID bytes are all-zero/all-FF with hasValue=1; memory likely torn or offset stale; treating as unset.");
-
             return new Guid(guidBytes).ToString();
         }
         catch (Exception ex)
@@ -165,12 +138,22 @@ static class FieldReaders
     }
 
     static readonly HashSet<string> _warned = [];
+    static readonly List<string> _warnings = [];
+    public static IReadOnlyList<string> Warnings => _warnings;
+    public static void ResetWarnings()
+    {
+        _warned.Clear();
+        _warnings.Clear();
+    }
 
     /// Logs a warning once per failure class so repeated per-player errors don't spam output.
     internal static string? WarnOnce(string failureClass, string message)
     {
         if (_warned.Add(failureClass))
+        {
+            _warnings.Add(message);
             Console.Error.WriteLine(message);
+        }
         return null;
     }
 

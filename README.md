@@ -23,7 +23,7 @@
 ```
 sbox.exe (live process)
     │
-    ├── DataTarget.AttachToProcess (ClrMD, no suspend)
+    ├── DataTarget.AttachToProcess (ClrMD, suspended by default)
     │
     ▼
 ┌─────────────────────────────────────────────┐
@@ -110,6 +110,7 @@ Or run the compiled executable directly:
 | Option | Description |
 |---|---|
 | `--pid <id>` | Attach to a specific PID. Required when multiple `sbox` instances are running. |
+| `--no-suspend` | Read a running target without suspending it; heap changes can produce inconsistent reads. |
 | `--dma-path <path>` | Where to write `dma_offsets.json` for the auto-updater (default: `../dma_offsets.json`, or `$SBOX_DUMPER_DMA_PATH`). |
 | `-h`, `--help` | Show usage. |
 
@@ -121,6 +122,37 @@ sbox-dumper sbox --dma-path ../shared/dma_offsets.json
 ---
 
 ## Output
+
+The target is suspended by default while managed memory is read, then resumed
+before JSON serialization and file I/O. `--no-suspend` opts into a live,
+potentially inconsistent read. Unknown options, nonpositive PIDs, and extra
+process names are rejected with exit code 2.
+
+The full dump uses `schema_version: 2` and includes `target_suspended`,
+`read_warnings`, `missing_offsets`, `missing_required_offsets`, and
+`offsets_complete`. Failed primitive reads are omitted instead of being emitted
+as zero or false; consumers must tolerate missing numeric and Boolean properties.
+Actual zero and false values remain present. Non-finite floats and incomplete
+Transform reads are omitted and reported in `read_warnings`. Transform decoding
+supports the existing 40-byte position/scale/rotation layout and does not guess
+alternate field addresses.
+
+All configured mappings in `GameObject`, `GameTransform`, and `DxrpPlayer` are
+required for publishing offset files. Missing optional types or mappings remain
+listed in `missing_offsets` but do not prevent publication. If required offsets
+are missing, only the diagnostic `sbox_dump.json` is updated; existing
+`offsets.json` and both DMA files are preserved. When no previous offset files
+exist, none are created for an incomplete result.
+
+Each output is written to a temporary file in the destination directory and
+replaced by a rename. The files are individually atomic, not a multi-file
+transaction. A shared-path write failure is an error even if local files were
+saved. Parent directories are created automatically.
+
+Exit codes: **0** = published without read warnings; **1** = capture or write
+failure; **2** = invalid arguments or ambiguous process selection; **3** = missing
+required offsets or read warnings (inspect the full dump). Read warnings alone
+do not prevent publication of otherwise complete offsets.
 
 The tool creates an `output/` directory containing:
 
